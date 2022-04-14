@@ -17,53 +17,101 @@ import {
 } from "@chakra-ui/react";
 
 export default function Cooldowns(props) {
-  const [champs, setChamps] = useState(props.data.allChamps);
+  const [champs, setChamps] = useState(
+    props.data.allChamps.sort((a, b) => a.name.localeCompare(b.name))
+  );
   const [championNames, setChampionNames] = useState(
-    props.data.allChamps.map((champ) => Object.keys(champ.data)).flat()
+    props.data.allChamps.map((champ) => champ.name).flat()
   );
   const [championAbilityLevels, setChampionAbilityLevels] = useState([
-    0, 0, 0, 0,
+    [0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0],
   ]);
   const [abilityHaste, setAbilityHaste] = useState(0);
+  const [bonusAttackSpeed, setBonusAttackSpeed] = useState(0);
   const [activeChampion, setActiveChampion] = useState(
-    Object.keys(props.data.allChamps[0].data)[0]
+    props.data.allChamps[0].name
   );
+
+  const calculateCooldown = ({
+    baseCooldown,
+    isYasuoQ,
+    isYoneQ,
+    isYoneW,
+    isZeriQ,
+    details,
+  }) => {
+    if (isYasuoQ) {
+      return (
+        baseCooldown * (1 - (0.01 * Math.max(bonusAttackSpeed, 111.1)) / 0.0167)
+      );
+    } else if (isYoneQ) {
+      return (
+        baseCooldown * (1 - (0.01 * Math.max(bonusAttackSpeed, 111.1)) / 0.0167)
+      );
+    } else if (isYoneW) {
+      return (
+        baseCooldown * (1 - (0.01 * Math.max(bonusAttackSpeed, 105)) / 0.0168)
+      );
+    } else if (isZeriQ) {
+      return Math.max(
+        baseCooldown /
+          (details.stats.attackSpeed.flat +
+            (details.stats.attackSpeedRatio.flat * bonusAttackSpeed) / 100),
+        1 / 3
+      );
+    } else if (!abilityHaste) {
+      return baseCooldown;
+    }
+    return baseCooldown * (100 / (100 + parseInt(abilityHaste)));
+  };
 
   return (
     <Grid gap={4}>
       <Select
         placeholder="Select a champion"
         onChange={(e) => {
-          setActiveChampion(Object.keys(champs[e.target.value].data)[0]);
+          setActiveChampion(e.target.value);
         }}
       >
         {championNames.map((championName, index) => (
-          <option key={index} value={index}>
+          <option key={index} value={championName}>
             {championName}
           </option>
         ))}
       </Select>
-      <Flex align={"center"}>
+      <Grid alignItems={"center"} templateColumns={`200px auto`} rowGap={4}>
         <Box>Ability Haste</Box>
         <Input
           type="number"
+          min={0}
+          max={500}
           value={abilityHaste}
           onChange={(e) => setAbilityHaste(e.target.value)}
         />
-      </Flex>
+
+        <Box>Bonus Attack Speed</Box>
+        <Input
+          type="number"
+          min={0}
+          max={112}
+          value={bonusAttackSpeed}
+          onChange={(e) => setBonusAttackSpeed(e.target.value)}
+        />
+      </Grid>
 
       {champs.map((champion) => {
-        const name = Object.keys(champion.data)[0];
-        const details = champion.data[name];
+        const name = champion.name;
+        const details = champion;
         if (name !== activeChampion) return null;
         return (
-          <Grid key={champion.data[name].key} gap={4}>
+          <Grid key={champion.id} gap={4}>
             <Heading as="h3" justifySelf="center">
               {name}
             </Heading>
             <Box justifySelf="center">
               <Image
-                src={`http://ddragon.leagueoflegends.com/cdn/12.7.1/img/champion/${name}.png`}
+                src={champion.icon}
                 alt={name}
                 width="100px"
                 height="100px"
@@ -78,69 +126,85 @@ export default function Cooldowns(props) {
             </Text>
             <Grid
               gridTemplateColumns={`repeat(4, 1fr)`}
+              gridTemplateRows={`repeat(2, 1fr)`}
               alignItems="center"
               justifyContent={"space-around"}
             >
-              {details.spells.map((spell, index) => {
-                return (
-                  <Grid
-                    key={spell.name}
-                    alignSelf="center"
-                    alignContent="center"
-                    alignItems="center"
-                    justifyContent={"center"}
-                    justifyItems={"center"}
-                    justifySelf={"center"}
-                    gap={4}
-                  >
-                    <Image
-                      src={`http://ddragon.leagueoflegends.com/cdn/12.7.1/img/spell/${spell.image.full}`}
-                      alt={spell.name}
-                      width="50px"
-                      height="50px"
-                    />
-                    <Text>{spell.name}</Text>
-                    <Slider
-                      aria-label={`slider-spell-${spell.name}`}
-                      onChange={(val) => {
-                        const newChampionAbilityLevels =
-                          championAbilityLevels.slice();
-                        newChampionAbilityLevels[index] = val;
-                        setChampionAbilityLevels(newChampionAbilityLevels);
-                      }}
-                      defaultValue={0}
-                      min={0}
-                      max={spell.cooldown.length - 1}
-                      step={1}
-                    >
-                      {spell.cooldown.map((_, index) => {
-                        return (
-                          <SliderMark
-                            key={index}
-                            value={index}
-                            label={`${index}`}
-                            pt={2}
-                          >
-                            {index + 1}
-                          </SliderMark>
-                        );
-                      })}
+              {Object.keys(details.abilities).map((spell, index) => {
+                if (spell === "P") return null;
+                const abilities = details.abilities[spell];
 
-                      <SliderTrack>
-                        <SliderFilledTrack />
-                      </SliderTrack>
-                      <SliderThumb />
-                    </Slider>
-                    <Text pt={4}>
-                      Cooldown:{" "}
-                      {(
-                        spell.cooldown[championAbilityLevels[index]] *
-                        (100 / (100 + parseInt(abilityHaste)))
-                      ).toFixed(2)}
-                      s
-                    </Text>
-                  </Grid>
-                );
+                return abilities.map((ability, i) => {
+                  return (
+                    <Grid
+                      key={ability.name}
+                      alignSelf="center"
+                      alignContent="center"
+                      alignItems="center"
+                      justifyContent={"center"}
+                      justifyItems={"center"}
+                      justifySelf={"center"}
+                      gap={4}
+                      gridRowStart={i + 1}
+                    >
+                      <Image
+                        src={ability.icon}
+                        alt={ability.name}
+                        width="50px"
+                        height="50px"
+                      />
+                      <Text>{details.abilities[spell].name}</Text>
+                      <Slider
+                        aria-label={`slider-spell-${details.abilities[spell].name}`}
+                        onChange={(val) => {
+                          const newChampionAbilityLevels =
+                            championAbilityLevels.slice();
+                          newChampionAbilityLevels[i][index] = val;
+                          setChampionAbilityLevels(newChampionAbilityLevels);
+                        }}
+                        defaultValue={0}
+                        min={0}
+                        max={ability.cooldown.modifiers[0].values.length - 1}
+                        step={1}
+                      >
+                        {ability.cooldown.modifiers[0].values.map(
+                          (_, index) => {
+                            return (
+                              <SliderMark
+                                key={index}
+                                value={index}
+                                label={`${index}`}
+                                pt={2}
+                              >
+                                {index + 1}
+                              </SliderMark>
+                            );
+                          }
+                        )}
+
+                        <SliderTrack>
+                          <SliderFilledTrack />
+                        </SliderTrack>
+                        <SliderThumb />
+                      </Slider>
+                      <Text pt={4}>
+                        Cooldown:{" "}
+                        {calculateCooldown({
+                          baseCooldown:
+                            ability.cooldown.modifiers[0].values[
+                              championAbilityLevels[i][index]
+                            ],
+                          isYasuoQ: details.name === "Yasuo" && spell === "Q",
+                          isYoneQ: details.name === "Yone" && spell === "Q",
+                          isYoneW: details.name === "Yone" && spell === "W",
+                          isZeriQ: details.name === "Zeri" && spell === "Q",
+                          details,
+                        }).toFixed(2)}
+                        s
+                      </Text>
+                    </Grid>
+                  );
+                });
               })}
             </Grid>
           </Grid>

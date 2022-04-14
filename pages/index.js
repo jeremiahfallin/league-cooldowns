@@ -30,12 +30,16 @@ export async function getStaticProps(context) {
   const ddragon = new DDragon();
 
   const champs = await ddragon.champion.all();
-  const allChamps = await Promise.all(
+  const data = await Promise.all(
     Object.keys(champs.data).map(async (championName) => {
-      const champData = await ddragon.champion.byName({ championName });
+      const champData = fetch(
+        `http://cdn.merakianalytics.com/riot/lol/resources/latest/en-US/champions/${championName}.json`,
+        { method: "GET" }
+      );
       return champData;
     })
   );
+  const allChamps = await Promise.all(data.map((champ) => champ.json()));
 
   return {
     props: { version: champs.version, allChamps },
